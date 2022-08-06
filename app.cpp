@@ -19,9 +19,7 @@
 namespace helloVulkan {
 
   struct SimplePushConstantData {
-    glm::mat2 transform;
-    glm::vec2 offset;
-    alignas(16) glm::vec3 colour;
+    glm::mat4 transform;
   };
 
   App::App() {
@@ -43,161 +41,58 @@ namespace helloVulkan {
     vkDeviceWaitIdle(helloVulkanDevice.device());
   }
 
-  glm::vec3 colourBlack { 0.0f, 0.0f, 0.0f };
+  enum axis {
+    axisx,
+    axisy,
+    axisz
+  };
 
-  void generateSierpinskiTriangle(std::vector<Model::Vertex> &vertices, std::vector<Model::Vertex> containingTriangle, int depth) {
-    // Calculate vertices for the triangle (the contained triangle)
-    // Top left point
-    float ax = (containingTriangle.at(0).position.x + containingTriangle.at(2).position.x) / 2;
-    float ay = (containingTriangle.at(0).position.y + containingTriangle.at(2).position.y) / 2;
-    
-    // Top right point
-    float bx = (containingTriangle.at(0).position.x + containingTriangle.at(1).position.x) / 2;
-    float by = (containingTriangle.at(0).position.y + containingTriangle.at(1).position.y) / 2;
-
-    // bottom point
-    float cx = (containingTriangle.at(1).position.x + containingTriangle.at(2).position.x) / 2;
-    float cy = (containingTriangle.at(1).position.y + containingTriangle.at(2).position.y) / 2;
-    std::vector<Model::Vertex> triangle = {
-      {{ax, ay}, colourBlack },
-      {{bx, by}, colourBlack },
-      {{cx, cy}, colourBlack },
-    };
-    vertices.push_back(triangle.at(0));
-    vertices.push_back(triangle.at(1));
-    vertices.push_back(triangle.at(2));
-
-    if (depth == 7) {
-      return;
-    }
-    depth++;
-
-
-
-    // Calculate vertices for the top containing triangle
-    // Top point
-    ax = containingTriangle.at(0).position.x;
-    ay = containingTriangle.at(0).position.y;
-    
-    // Bottom right point
-    bx = triangle.at(1).position.x;
-    by = triangle.at(1).position.y;
-
-    // Bottom left point
-    cx = triangle.at(0).position.x;
-    cy = triangle.at(0).position.y;
-
-    std::vector<Model::Vertex> topContainingTriangle {
-      {{ax, ay}, colourBlack },
-      {{bx, by}, colourBlack },
-      {{cx, cy}, colourBlack },
-    };
-    generateSierpinskiTriangle(vertices, topContainingTriangle, depth);
-
-
-
-    // Calculate vertices for the bottom right containing triangle
-    // Top point
-    ax = triangle.at(1).position.x;
-    ay = triangle.at(1).position.y;
-    
-    // Bottom right point
-    bx = containingTriangle.at(1).position.x;
-    by = containingTriangle.at(1).position.y;
-
-    // Bottom left point
-    cx = triangle.at(2).position.x;
-    cy = triangle.at(2).position.y;
-
-    std::vector<Model::Vertex> bottomRightContainingTriangle {
-      {{ax, ay}, colourBlack },
-      {{bx, by}, colourBlack },
-      {{cx, cy}, colourBlack },
-    };
-    generateSierpinskiTriangle(vertices, bottomRightContainingTriangle, depth);
-
-
-
-    // Calculate vertices for the bottom left containing triangle
-    // Top point
-    ax = triangle.at(0).position.x;
-    ay = triangle.at(0).position.y;
-    
-    // Bottom right point
-    bx = triangle.at(2).position.x;
-    by = triangle.at(2).position.y;
-
-    // Bottom left point
-    cx = containingTriangle.at(2).position.x;
-    cy = containingTriangle.at(2).position.y;
-
-    std::vector<Model::Vertex> bottomLeftContainingTriangle {
-      {{ax, ay}, colourBlack },
-      {{bx, by}, colourBlack },
-      {{cx, cy}, colourBlack },
-    };
-    generateSierpinskiTriangle(vertices, bottomLeftContainingTriangle, depth);
-  }
-
-  void scaleVertices(std::vector<Model::Vertex> &vertices) {
-    float xScale = 2;
-    float yScale = 1;
-    glm::mat2 scaleMat{{xScale, 0}, {0, yScale}};
-    for (int i = 0; i < vertices.size(); i++) {
-      vertices[i].position = vertices[i].position * scaleMat;
-    }
-  }
-
-  glm::mat2 calculateRotationMatrix() {
+  glm::mat4 calculateRotationMatrix(axis axisOfRotation) {
     static float rotation = -.25f * glm::two_pi<float>();
     rotation += 0.01;
 
     float ix = glm::cos(rotation);
     float iy = glm::sin(rotation);
+    float iz = glm::sin(rotation);
     float jx = -glm::sin(rotation);
     float jy = glm::cos(rotation);
+    float jz = glm::cos(rotation);
+    float kx = -glm::sin(rotation);
+    float ky = glm::cos(rotation);
+    float kz = glm::cos(rotation);
 
-    glm::vec2 iRotated{ix, iy};
-    glm::vec2 jRotated{jx, jy};
-    glm::mat2 rotationMat{iRotated, jRotated};
+    glm::vec4 iRotated;
+    glm::vec4 jRotated;
+    glm::vec4 kRotated;
+    glm::vec4 translationRotated;
+
+    if (axisOfRotation == axisx) {
+      iRotated = {1.0f, 0.0f, 0.0f, 0.0f};
+      jRotated = {0.0f, jy, jz, 0.0f};
+      kRotated = {0.0f, ky, kz, 0.0f};
+      translationRotated = {0.0f, 0.0f, 0.0f, 1.0f};
+    }
+
+    glm::mat4 rotationMat{iRotated, jRotated, kRotated, translationRotated};
     return rotationMat;
   }
 
   // TODO:
   // 1) Why does my triangle rotate left instead of right and is that ok?
   // 2) Is the rotation perfect or slightly odd? maybe it needs to be modded (modulus (%)) or perhaps the triangles are being rotated around the origin and that could be making things look skewed?!
-  void rotateVertices(std::vector<Model::Vertex> &vertices) {
-    float rotation = -.25f * glm::two_pi<float>();
-    float ix = glm::cos(rotation);
-    float iy = glm::sin(rotation);
-    float jx = -glm::sin(rotation);
-    float jy = glm::cos(rotation);
-
-    glm::vec2 iRotated{ix, iy};
-    glm::vec2 jRotated{jx, jy};
-    glm::mat2 rotationMat{iRotated, jRotated};
-    for (int i = 0; i < vertices.size(); i++) {
-      vertices[i].position = vertices[i].position * rotationMat;
-    }
-  }
+  // 3) when I translate before rotate, the visuals are not as I would expect?!
+  // 4) Does the attribute description need to match the Vertex.position size?
   
   void App::loadModels() {
     glm::vec3 colourPurple { 0.3f, 0.0f, 0.5f };
-    std::vector<Model::Vertex> containingTriangle {
-      {{0.0f, -0.98f}, colourPurple },
-      {{0.98f, 0.98f}, colourPurple },
-      {{-0.98f, 0.98f}, colourBlack },
+    std::vector<Model::Vertex> vertices = {
+      {{-0.5f, -0.5f, 0.5f, 1.0f}, colourPurple},
+      {{0.5f, -0.5f, 0.5f, 1.0f}, colourPurple},
+      {{0.5f, 0.5f, 0.5f, 1.0f}, colourPurple},
+      {{-0.5f, -0.5f, 0.5f, 1.0f}, colourPurple},
+      {{0.5f, 0.5f, 0.5f, 1.0f}, colourPurple},
+      {{-0.5f, 0.5f, 0.5f, 1.0f}, colourPurple},
     };
-    std::vector<Model::Vertex> vertices {};
-
-    generateSierpinskiTriangle(vertices, containingTriangle, 0);
-
-    vertices.push_back(containingTriangle.at(0));
-    vertices.push_back(containingTriangle.at(1));
-    vertices.push_back(containingTriangle.at(2));
-
-//    scaleVertices(vertices);
-//    rotateVertices(vertices);
 
     model = std::make_unique<Model>(helloVulkanDevice, vertices);
   }
@@ -265,7 +160,7 @@ namespace helloVulkan {
       renderPassInfo.renderArea.extent = helloVulkanSwapChain.getSwapChainExtent();
 
       std::array<VkClearValue, 2> clearValues{};
-      clearValues[0].color = {0.0f, 0.0f, 0.0f};
+      clearValues[0].color = {0.5f, 0.5f, 0.5f};
       clearValues[1].depthStencil = {1.0f, 0};
       renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
       renderPassInfo.pClearValues = clearValues.data();
@@ -277,14 +172,17 @@ namespace helloVulkan {
       
       for (int j = 0; j < 4; j++) {
         float scalar = frame * 0.01f;
-        float xScale = 0.5;
-        float yScale = 0.5;
-        glm::mat2 scalarMatrix{{xScale, 0}, {0, yScale}};
-        SimplePushConstantData pushConstant = {
-          {scalarMatrix * calculateRotationMatrix()},
-          {-0.5f + scalar, 0.3 + -0.2f * j},
-          {0,0,0 /*0.2f * j - scalar * 0.2, 0.0f, 0.0f + scalar * 0.07*/},
-        };
+        float xScale = 0.5f;
+        float yScale = 0.5f;
+        float zScale = 0.5f;
+
+        SimplePushConstantData pushConstant = { {
+          xScale, 0.0f, 0.0f, 0.0f,
+          0.0f, yScale, 0.0f, 0.0f,
+          0.0f, 0.0f, zScale, 0.0f,
+          0.0f, 0.0f, 0.5f, 1.0f
+        }, };
+        pushConstant.transform = pushConstant.transform * calculateRotationMatrix(axisx);
 
         vkCmdPushConstants(
             commandBuffers[imageIndex],
@@ -298,7 +196,7 @@ namespace helloVulkan {
       }
 
       vkCmdEndRenderPass(commandBuffers[imageIndex]);
-      if (vkEndCommandBuffer(commandBuffers[imageIndex]) !=VK_SUCCESS) {
+      if (vkEndCommandBuffer(commandBuffers[imageIndex]) != VK_SUCCESS) {
         std::runtime_error("Failed to end command buffer");
       }
   }

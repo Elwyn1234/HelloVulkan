@@ -53,7 +53,7 @@ namespace helloVulkan {
   std::vector<VkVertexInputAttributeDescription> Model::Vertex::getAttributeDescriptions() {
     std::vector<VkVertexInputAttributeDescription> descriptions(2);
     descriptions[0].binding = 0;
-    descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    descriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
     descriptions[0].location = 0;
     descriptions[0].offset = offsetof(Vertex, position);
 
